@@ -22,4 +22,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="frontend\TaskManagementService.Tests\**" />
+    <Content Remove="frontend\TaskManagementService.Tests\**" />
+    <EmbeddedResource Remove="frontend\TaskManagementService.Tests\**" />
+    <None Remove="frontend\TaskManagementService.Tests\**" />
+  </ItemGroup>
+
 </Project>
