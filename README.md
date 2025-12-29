@@ -155,6 +155,251 @@ User-Task-Management/
 - **Authentication**: JWT Bearer tokens
 - **Task Reminder Service**: .NET Framework 4.7.2, RabbitMQ, Windows Service
 
+## Data Terms
+
+### Entity Relationship Model
+
+The application uses three main entities:
+
+#### User
+Represents a user account in the system.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `Id` | int | Primary Key | Unique identifier for the user |
+| `Username` | string | Required, Max 100 chars, Unique | User login name |
+| `Email` | string | Required, Max 200 chars, Unique, Email format | User email address |
+| `PasswordHash` | string | Required | BCrypt hashed password |
+| `Role` | Role enum | Required | User role (User = 1, Admin = 2) |
+| `FullName` | string | Max 200 chars | User's full name |
+| `CreatedAt` | DateTime | Required | Account creation timestamp (UTC) |
+| `UpdatedAt` | DateTime? | Nullable | Last update timestamp (UTC) |
+| `IsActive` | bool | Required | Whether the account is active |
+
+**Role Enum Values:**
+- `User = 1` - Standard user with task management permissions
+- `Admin = 2` - Administrator with user management permissions
+
+#### Task
+Represents a task assigned to a user.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `Id` | int | Primary Key | Unique identifier for the task |
+| `Title` | string | Required, Max 200 chars | Task title |
+| `Description` | string | Required, Max 1000 chars | Detailed task description |
+| `DueDate` | DateTime | Required | Task due date and time |
+| `Priority` | Priority enum | Required | Task priority level |
+| `UserId` | int | Required, Foreign Key | Reference to User who owns the task |
+| `User` | User (Navigation) | Optional | Navigation property to User entity |
+| `UserFullName` | string | Required, Max 200 chars | Denormalized user full name |
+| `UserEmail` | string | Required, Max 200 chars, Email format | Denormalized user email |
+| `CreatedAt` | DateTime | Required | Task creation timestamp (UTC) |
+| `UpdatedAt` | DateTime | Required | Last update timestamp (UTC) |
+
+**Priority Enum Values:**
+- `Low = 1` - Low priority task
+- `Medium = 2` - Medium priority task
+- `High = 3` - High priority task
+
+**Relationships:**
+- Many-to-One: Task → User (ForeignKey: `UserId`, Delete: Restrict)
+
+#### Reminder
+Represents a reminder notification for a task.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `Id` | int | Primary Key | Unique identifier for the reminder |
+| `TaskId` | int | Required, Foreign Key | Reference to Task |
+| `Task` | Task (Navigation) | Optional | Navigation property to Task entity |
+| `Message` | string | Required, Max 500 chars | Reminder message content |
+| `ProcessedAt` | DateTime? | Nullable | When the reminder was processed |
+| `CreatedAt` | DateTime | Required | Reminder creation timestamp (UTC) |
+
+**Relationships:**
+- Many-to-One: Reminder → Task (ForeignKey: `TaskId`, Delete: Cascade)
+
+### Database Relationships Summary
+
+```
+User (1) ────────< (Many) Task
+                        │
+                        │ (1)
+                        │
+                        │
+                   (Many) Reminder
+```
+
+- **User ↔ Task**: One-to-Many (a user can have multiple tasks, each task belongs to one user)
+- **Task ↔ Reminder**: One-to-Many (a task can have multiple reminders, each reminder belongs to one task)
+- Task deletion is restricted if referenced by active reminders (Cascade delete for reminders)
+
+## Process Flow
+
+The following flowchart illustrates the main processes in the Task Management Application:
+
+```mermaid
+flowchart TD
+    Start([User Starts Application]) --> Login{Login Page}
+    Login -->|Enter Credentials| Auth[POST /api/auth/login]
+    Auth -->|Validate| CheckUser{User Valid?}
+    CheckUser -->|No| LoginError[Return Error]
+    LoginError --> Login
+    CheckUser -->|Yes| GenerateJWT[Generate JWT Token]
+    GenerateJWT --> Dashboard[User Dashboard]
+    
+    Dashboard --> TaskOps{Task Operations}
+    
+    TaskOps -->|Create| CreateTask[POST /api/tasks]
+    TaskOps -->|View All| GetTasks[GET /api/tasks]
+    TaskOps -->|View One| GetTask[GET /api/tasks/:id]
+    TaskOps -->|Update| UpdateTask[PUT /api/tasks/:id]
+    TaskOps -->|Delete| DeleteTask[DELETE /api/tasks/:id]
+    
+    CreateTask --> ValidateTask{Validation}
+    ValidateTask -->|Invalid| TaskError[Return Validation Error]
+    TaskError --> Dashboard
+    ValidateTask -->|Valid| SaveTask[Save to Database]
+    SaveTask --> ReturnTask[Return Created Task]
+    ReturnTask --> Dashboard
+    
+    GetTasks --> QueryDB[Query Database]
+    GetTask --> QueryDB
+    QueryDB --> ReturnTasks[Return Task List/DTO]
+    ReturnTasks --> Dashboard
+    
+    UpdateTask --> ValidateUpdate{Validation}
+    ValidateUpdate -->|Invalid| TaskError
+    ValidateUpdate -->|Valid| UpdateDB[Update in Database]
+    UpdateDB --> ReturnUpdated[Return Updated Task]
+    ReturnUpdated --> Dashboard
+    
+    DeleteTask --> DeleteDB[Delete from Database]
+    DeleteDB --> ConfirmDelete[Return Success]
+    ConfirmDelete --> Dashboard
+    
+    Dashboard --> AdminOps{Admin Operations?}
+    AdminOps -->|Yes| UserMgmt[User Management]
+    AdminOps -->|No| TaskOps
+    
+    UserMgmt --> GetUsers[GET /api/users]
+    UserMgmt --> CreateUser[POST /api/users]
+    UserMgmt --> UpdateUser[PUT /api/users/:id]
+    UserMgmt --> DeleteUser[DELETE /api/users/:id]
+    
+    GetUsers --> QueryUsers[Query Users]
+    CreateUser --> ValidateUser[Validate & Hash Password]
+    UpdateUser --> ValidateUser
+    DeleteUser --> SoftDelete[Soft Delete User]
+    
+    QueryUsers --> ReturnUsers[Return User List]
+    ValidateUser --> SaveUser[Save User]
+    SoftDelete --> ConfirmDeleteUser[Return Success]
+    
+    ReturnUsers --> Dashboard
+    SaveUser --> Dashboard
+    ConfirmDeleteUser --> Dashboard
+    
+    style Start fill:#e1f5ff
+    style Dashboard fill:#d4edda
+    style Auth fill:#fff3cd
+    style GenerateJWT fill:#fff3cd
+    style SaveTask fill:#cfe2ff
+    style UpdateDB fill:#cfe2ff
+    style DeleteDB fill:#f8d7da
+    style ValidateTask fill:#e7f3ff
+    style ValidateUpdate fill:#e7f3ff
+```
+
+### Task Reminder Service Flow (Optional)
+
+```mermaid
+flowchart TD
+    ServiceStart([Task Reminder Service Starts]) --> Init[Initialize Service]
+    Init --> Timer[Start Timer Interval]
+    Timer --> Wait{Wait for Interval}
+    Wait -->|Every 5 minutes| CheckOverdue[Check for Overdue Tasks]
+    CheckOverdue --> QueryDB[Query Database:<br/>DueDate < CurrentDateTime]
+    QueryDB --> FoundTasks{Found<br/>Overdue Tasks?}
+    FoundTasks -->|No| Wait
+    FoundTasks -->|Yes| CheckProcessed{Already<br/>Processed?}
+    CheckProcessed -->|Yes| Wait
+    CheckProcessed -->|No| CreateMessage[Create Reminder Message]
+    CreateMessage --> Publish[Publish to RabbitMQ Queue]
+    Publish --> MarkProcessed[Mark Task as Processed]
+    MarkProcessed --> Cleanup[Cleanup Old Processed Entries]
+    Cleanup --> Wait
+    
+    Publish --> Queue[task-reminders Queue]
+    Queue --> Consumer[External Consumer]
+    
+    style ServiceStart fill:#e1f5ff
+    style Timer fill:#fff3cd
+    style CheckOverdue fill:#d4edda
+    style Publish fill:#cfe2ff
+    style Queue fill:#f8d7da
+```
+
+### Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API
+    participant AuthService
+    participant Database
+    
+    User->>Frontend: Enter Credentials
+    Frontend->>API: POST /api/auth/login
+    API->>AuthService: LoginAsync(credentials)
+    AuthService->>Database: Query User by Username
+    Database-->>AuthService: User Data
+    AuthService->>AuthService: Verify Password (BCrypt)
+    alt Valid Credentials
+        AuthService->>AuthService: Generate JWT Token
+        AuthService-->>API: LoginResponseDto (Token + User Info)
+        API-->>Frontend: 200 OK + JWT Token
+        Frontend->>Frontend: Store Token in LocalStorage
+        Frontend->>Frontend: Navigate to Dashboard
+    else Invalid Credentials
+        AuthService-->>API: null
+        API-->>Frontend: 401 Unauthorized
+        Frontend-->>User: Show Error Message
+    end
+```
+
+### Task CRUD Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API
+    participant TaskService
+    participant Repository
+    participant Database
+    
+    User->>Frontend: Create/Update Task
+    Frontend->>API: POST/PUT /api/tasks (with JWT Token)
+    API->>API: Validate JWT Token
+    API->>API: Extract User ID from Token
+    API->>TaskService: CreateTaskAsync/UpdateTaskAsync
+    TaskService->>TaskService: Validate DTO
+    TaskService->>Database: Get User by ID
+    Database-->>TaskService: User Data
+    TaskService->>Repository: Create/Update Task
+    Repository->>Database: INSERT/UPDATE Task
+    Database-->>Repository: Created/Updated Task
+    Repository-->>TaskService: Task Entity
+    TaskService->>TaskService: Map to DTO
+    TaskService-->>API: TaskDto
+    API-->>Frontend: 200 OK + TaskDto
+    Frontend->>Frontend: Update UI
+    Frontend-->>User: Show Updated Task
+```
+
 ## Default Login Credentials (Development Only)
 
 > **⚠️ FOR LOCAL DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION**
@@ -244,7 +489,7 @@ The service is designed as a Windows Service. For development, you would need to
 
 ### How It Works
 
-- The service periodically checks the database for tasks where `DueDate < CurrentDateTime` and `Status != Completed`
+- The service periodically checks the database for tasks where `DueDate < CurrentDateTime`
 - When overdue tasks are found, it publishes reminder messages to the RabbitMQ queue (`task-reminders`)
 - Each reminder message includes:
   - Task details (ID, Title, Description, DueDate, Priority)
