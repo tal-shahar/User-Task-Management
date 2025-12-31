@@ -24,8 +24,13 @@ export const fetchTaskById = createAsyncThunk('tasks/fetchById', async (id: numb
   return await taskApi.getTaskById(id);
 });
 
-export const createTask = createAsyncThunk('tasks/create', async (task: CreateTaskDto) => {
-  return await taskApi.createTask(task);
+export const createTask = createAsyncThunk('tasks/create', async (task: CreateTaskDto, { rejectWithValue }) => {
+  try {
+    return await taskApi.createTask(task);
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.error?.details || error.response?.data?.error?.message || error.message || 'Failed to create task';
+    return rejectWithValue(errorMessage);
+  }
 });
 
 export const updateTask = createAsyncThunk(
@@ -90,7 +95,7 @@ const taskSlice = createSlice({
       })
       .addCase(createTask.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to create task';
+        state.error = typeof action.payload === 'string' ? action.payload : (action.error.message || 'Failed to create task');
       })
       // Update task
       .addCase(updateTask.pending, (state) => {
@@ -132,5 +137,6 @@ const taskSlice = createSlice({
 
 export const { setSelectedTask, clearError } = taskSlice.actions;
 export default taskSlice.reducer;
+
 
 

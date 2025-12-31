@@ -28,6 +28,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.UserId).IsRequired();
             entity.Property(e => e.UserFullName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.UserEmail).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.UserTelephone).IsRequired().HasMaxLength(50);
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
 

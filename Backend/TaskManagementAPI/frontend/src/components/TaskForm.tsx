@@ -86,8 +86,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ task, onSuccess }) => {
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error submitting form:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error details:', err.response?.data?.error);
     }
   };
 

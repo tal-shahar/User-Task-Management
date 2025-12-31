@@ -34,18 +34,29 @@ public class TaskService : ITaskService
         var user = await _context.Users.FindAsync(userId);
         if (user == null)
         {
-            throw new InvalidOperationException("User not found");
+            throw new InvalidOperationException($"User with ID {userId} not found in database");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            throw new InvalidOperationException($"User with ID {userId} has no email address");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Username) && string.IsNullOrWhiteSpace(user.FullName))
+        {
+            throw new InvalidOperationException($"User with ID {userId} has no username or full name");
         }
 
         var task = new Models.Task
         {
-            Title = createTaskDto.Title,
-            Description = createTaskDto.Description,
+            Title = createTaskDto.Title ?? string.Empty,
+            Description = createTaskDto.Description ?? string.Empty,
             DueDate = createTaskDto.DueDate,
             Priority = (Priority)createTaskDto.Priority,
             UserId = userId,
-            UserFullName = string.IsNullOrEmpty(user.FullName) ? user.Username : user.FullName,
-            UserEmail = user.Email
+            UserFullName = string.IsNullOrWhiteSpace(user.FullName) ? user.Username : user.FullName,
+            UserEmail = user.Email,
+            UserTelephone = string.Empty // UserTelephone is required in DB but not in User model
         };
 
         var createdTask = await _taskRepository.CreateAsync(task);

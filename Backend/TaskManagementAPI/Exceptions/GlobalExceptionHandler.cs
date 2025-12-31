@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace TaskManagementAPI.Exceptions;
 
@@ -27,17 +29,21 @@ public class GlobalExceptionHandler
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+
+        var isDevelopment = context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
 
         var response = new
         {
             error = new
             {
                 message = "An error occurred while processing your request",
-                details = exception.Message
+                details = exception.Message,
+                stackTrace = isDevelopment ? exception.StackTrace : null,
+                innerException = isDevelopment && exception.InnerException != null ? exception.InnerException.Message : null
             }
         };
 
@@ -45,5 +51,6 @@ public class GlobalExceptionHandler
         return context.Response.WriteAsync(json);
     }
 }
+
 
 

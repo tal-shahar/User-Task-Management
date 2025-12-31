@@ -73,13 +73,19 @@ public class TaskController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
+            _logger.LogInformation("Creating task for user ID: {UserId}", userId);
             var task = await _taskService.CreateTaskAsync(createTaskDto, userId);
             return CreatedAtAction(nameof(GetTask), new { id = task.Id }, task);
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation while creating task: {Message}", ex.Message);
+            return StatusCode(400, new { error = new { message = ex.Message } });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating task");
-            return StatusCode(500, "An error occurred while creating the task");
+            _logger.LogError(ex, "Error creating task: {Message}", ex.Message);
+            return StatusCode(500, new { error = new { message = "An error occurred while creating the task", details = ex.Message } });
         }
     }
 

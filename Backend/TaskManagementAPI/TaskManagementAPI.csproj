@@ -27,6 +27,10 @@
     <Content Remove="frontend\TaskManagementService.Tests\**" />
     <EmbeddedResource Remove="frontend\TaskManagementService.Tests\**" />
     <None Remove="frontend\TaskManagementService.Tests\**" />
+    <Compile Remove="TaskManagementAPI.Tests\**" />
+    <Content Remove="TaskManagementAPI.Tests\**" />
+    <EmbeddedResource Remove="TaskManagementAPI.Tests\**" />
+    <None Remove="TaskManagementAPI.Tests\**" />
   </ItemGroup>
 
 </Project>
